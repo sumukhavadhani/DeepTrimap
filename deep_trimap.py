@@ -39,13 +39,13 @@ def max_pool_2x2(x):
 def weight_variable(shape):
   """weight_variable generates a weight variable of a given shape."""
   initial = tf.truncated_normal(shape, stddev=0.1)
-  return tf.Variable(initial)
+  return tf.Variable(initial, name="weights")
 
 
 def bias_variable(shape):
   """bias_variable generates a bias variable of a given shape."""
   initial = tf.constant(0.1, shape=shape)
-  return tf.Variable(initial)
+  return tf.Variable(initial, name="biases")
 
 def deepnn(x):
   # Reshape to use within a convolutional neural net.
@@ -93,6 +93,8 @@ def deepnn(x):
     b_fc2 = bias_variable([3])
 
     y_conv = tf.matmul(h_fc1_drop, W_fc2) + b_fc2
+  
+  tf.add_to_collection("y_conv", y_conv)
   return y_conv, keep_prob
 
 def load_data(data_df):    
@@ -145,9 +147,11 @@ def main(_):
   # Create the model
   x = tf.placeholder(tf.float32, [BATCH_SIZE,IMAGE_SIZE,IMAGE_SIZE,NUM_CHANNELS])
 
+  tf.add_to_collection("x", x)
+
   # Define loss and optimizer
   y_ = tf.placeholder(tf.float32, [BATCH_SIZE, NUM_OUTPUT_LEVELS])
-
+  
   # Build the graph for the deep net
   y_conv, keep_prob = deepnn(x)
 
@@ -175,24 +179,31 @@ def main(_):
     sess.run(tf.global_variables_initializer())
     coord = tf.train.Coordinator()
     threads = tf.train.start_queue_runners(sess=sess, coord=coord)
-    try:
-      step = 0
-      while not coord.should_stop():                
-        if step % 100 == 0:
-          train_accuracy = accuracy.eval(feed_dict={x: sess.run(train_batch[0]), y_: sess.run(train_batch[1]), keep_prob: 1.0})
-          print('step %d, training accuracy %g' % (step, train_accuracy))
-        train_step.run(feed_dict={x: sess.run(train_batch[0]), y_: sess.run(train_batch[1]), keep_prob: 0.5})
-        step += 1
-        if step % 1000 == 0:
-          test_accuracy = accuracy.eval(feed_dict={ x: sess.run(test_batch[0]), y_: sess.run(test_batch[1]), keep_prob: 1.0})
-          print('test accuracy %g' % (step, test_accuracy))
-    except tf.errors.OutOfRangeError:
-      print('Done training for %d epochs, %d steps.' % (num_epochs, step))
-      save_path = saver.save(sess, FLAGS.model_dir, global_step=step)
-      print("Model saved in file: %s" % save_path)      
-    finally:
-      # When done, ask the threads to stop.
-      coord.request_stop()
+
+    for step in range(100000):
+      try:
+        while not coord.should_stop():                
+          if step % 100 == 0:
+            train_accuracy = accuracy.eval(feed_dict={x: sess.run(train_batch[0]), y_: sess.run(train_batch[1]), keep_prob: 1.0})
+            print('step %d, training accuracy %g' % (step, train_accuracy))
+          train_step.run(feed_dict={x: sess.run(train_batch[0]), y_: sess.run(train_batch[1]), keep_prob: 0.5})
+          step += 1
+          if step % 1000 == 0:
+            test_accuracy = accuracy.eval(feed_dict={ x: sess.run(test_batch[0]), y_: sess.run(test_batch[1]), keep_prob: 1.0})
+            print('step %d, test accuracy %g' % (step, test_accuracy))
+          
+          if step%5000 == 0:
+            print('Done training for %d epochs, %d steps.' % (num_epochs, step))
+            save_path = saver.save(sess, FLAGS.model_dir, global_step=step)
+            print("Model saved in file: %s" % save_path)  
+      except tf.errors.OutOfRangeError:
+        print('Done training for %d epochs, %d steps.' % (num_epochs, step))
+        save_path = saver.save(sess, FLAGS.model_dir, global_step=step)
+        print("Model saved in file: %s" % save_path)      
+      finally:
+        # When done, ask the threads to stop.
+        coord.request_stop()
+        break
 
 if __name__ == '__main__':
   parser = argparse.ArgumentParser()
